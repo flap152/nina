@@ -70,6 +70,12 @@ Python 3.9+.
 
 ## Use
 
+Preflight-check a live NINA (orchestrator and NINA may be on different LAN machines):
+
+```bash
+ffsurvey doctor --host 192.168.1.50 --port 1888   # add --capture-test / --slew-test on a rig
+```
+
 Drive a live survey (capture half — needs NINA + the Advanced API plugin running):
 
 ```bash
@@ -132,6 +138,7 @@ nodes    = aggregate_nodes(report.processed, burst_filter="post_settle")
 | `capture/ninaapi.py` | Live NINA Advanced API client (raw slew, read-only capture-solve) | points 1–3 |
 | `capture/planner.py` | Grid + approach-pair planning (offset-then-slew-in, feasibility) | §6.1, §6.2b |
 | `capture/runner.py` | Survey loop enforcing the invariants; writes manifest + sidecar | §5.1, points 2–6 |
+| `capture/doctor.py` | Live preflight: reachability, pier-side key, no-sync solve, RA-unit | §8, §9 |
 
 Both frames are kept per node (PRD point 9): `aggregate.py` computes flexure and
 hysteresis in the **gravity** frame *and* the **sensor** frame, so a sensor-fixed

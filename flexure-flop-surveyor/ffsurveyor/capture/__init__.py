@@ -18,6 +18,7 @@ still need confirmation against a live NINA instance.
 from .ninaapi import NinaClient, NinaApiError, PlateSolveReadout
 from .planner import ApproachLeg, NodePlan, SurveyPlan, build_survey_plan
 from .runner import RunnerConfig, SurveyRunner
+from .doctor import Check, DoctorReport, run_doctor
 
 __all__ = [
     "NinaClient",
@@ -29,4 +30,7 @@ __all__ = [
     "build_survey_plan",
     "RunnerConfig",
     "SurveyRunner",
+    "Check",
+    "DoctorReport",
+    "run_doctor",
 ]

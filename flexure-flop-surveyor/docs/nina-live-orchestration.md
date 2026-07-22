@@ -22,6 +22,39 @@ invariants).
 
 ---
 
+## Where the orchestrator runs (LAN topology)
+
+The ninaAPI is an HTTP server on the machine running NINA, so the orchestrator and
+NINA can live on **different machines on the same LAN** — e.g. the analyzer/runner
+on a Mac, NINA + gear on a Win11 mount PC:
+
+```
+  Mac (orchestrator)  --- HTTP :1888 --->  Win11 mount PC (NINA + Advanced API + gear)
+   ffsurvey run/doctor                      slews, captures, SAVES FITS locally
+```
+
+- Point the runner at the mount PC: `--host <win11-lan-ip> --port 1888`.
+- On Windows: allow inbound TCP **1888** through the firewall, and set an API key
+  in the plugin (`--api-key`) if the LAN isn't trusted.
+- **FITS land on the NINA machine.** The REST link carries commands and the solve
+  *readout*, not images. Run `ffsurvey analyze` on the mount PC, or share/sync the
+  save folder (SMB) to wherever you analyze. The sidecar CSV is written by the
+  runner on the machine it runs on — keep it alongside the FITS for `analyze`.
+
+Verify reachability before a run:
+
+```bash
+ffsurvey doctor --host <win11-lan-ip> --port 1888
+# add --capture-test to confirm capture-solve does not sync the mount
+# add --slew-test  to sanity-check the RA unit (the mount may move!)
+```
+
+`doctor` checks: API reachable + version, mount info + which pier-side key is
+present, camera reachable; with `--capture-test` it confirms the solve returns a
+rotation and that pointing does **not** change across the solve (PRD point 3);
+with `--slew-test` it slews to the current position as an RA-unit sanity check
+(PRD 9, verify-item #1). Exit code is non-zero on any blocking failure.
+
 ## Design invariants enforced in code
 
 | # | Invariant | Where enforced |

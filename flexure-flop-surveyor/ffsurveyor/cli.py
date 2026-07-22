@@ -131,6 +131,21 @@ def _run(args) -> int:
     return 0
 
 
+def _doctor(args) -> int:
+    """Preflight-check a live NINA Advanced API instance."""
+    from .capture import NinaClient, run_doctor
+
+    client = NinaClient(host=args.host, port=args.port, api_key=args.api_key)
+    report = run_doctor(
+        client,
+        capture_test=args.capture_test,
+        slew_test=args.slew_test,
+        exposure_s=args.exposure,
+    )
+    print(report.render())
+    return 0 if report.ok else 2
+
+
 def _compare(args) -> int:
     run_a = _load_nodes(args.a)
     run_b = _load_nodes(args.b)
@@ -182,6 +197,17 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--strict-pier-side", action="store_true")
     r.add_argument("--dry-run", action="store_true", help="plan without commanding gear")
     r.set_defaults(func=_run)
+
+    d = sub.add_parser("doctor", help="preflight-check a live NINA Advanced API")
+    d.add_argument("--host", default="localhost")
+    d.add_argument("--port", type=int, default=1888)
+    d.add_argument("--api-key", default=None)
+    d.add_argument("--capture-test", action="store_true",
+                   help="take one solved exposure and check it does not sync the mount")
+    d.add_argument("--slew-test", action="store_true",
+                   help="slew to current position to sanity-check the RA unit (mount may move!)")
+    d.add_argument("--exposure", type=float, default=3.0)
+    d.set_defaults(func=_doctor)
 
     c = sub.add_parser("compare", help="difference two analyzed runs")
     c.add_argument("--a", required=True, help="run A node_results.json")
