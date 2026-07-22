@@ -95,6 +95,42 @@ def _load_nodes(path: str) -> List[NodeAggregate]:
     return nodes
 
 
+def _run(args) -> int:
+    """Drive a live survey over the NINA Advanced API (capture half)."""
+    from .capture import NinaClient, build_survey_plan, RunnerConfig, SurveyRunner
+
+    manifest = load_manifest(args.manifest)
+    plan = build_survey_plan(
+        alt_bands_deg=tuple(args.alt_bands),
+        azimuths_deg=tuple(args.azimuths),
+        load_axis=args.load_axis,
+        offset_deg=args.offset,
+        min_altitude_deg=args.min_alt,
+    )
+    print(f"Planned {len(plan)} node(s): {plan.notes}")
+    if len(plan) == 0:
+        print("No feasible nodes; check grid / offset / min-altitude.", file=sys.stderr)
+        return 1
+
+    client = NinaClient(host=args.host, port=args.port, api_key=args.api_key)
+    cfg = RunnerConfig(
+        exposure_s=args.exposure, burst_count=args.burst, gain=args.gain,
+        settle_s=args.settle, strict_pier_side=args.strict_pier_side,
+        out_dir=args.out, dry_run=args.dry_run,
+    )
+    runner = SurveyRunner(client, manifest, plan, cfg)
+    runner.run()
+    paths = runner.write_outputs()
+    n_frames = len(runner.sidecar_rows)
+    warns = [w for v in runner.visits for w in v.warnings]
+    print(f"Captured {n_frames} frame(s) across {len(runner.visits)} node-visit(s).")
+    for w in warns:
+        print(f"  warning: {w}", file=sys.stderr)
+    print(f"Wrote {paths['manifest']} and {paths['sidecar']}")
+    print("Next: run `ffsurvey analyze` on the saved FITS + sidecar.")
+    return 0
+
+
 def _compare(args) -> int:
     run_a = _load_nodes(args.a)
     run_b = _load_nodes(args.b)
@@ -127,6 +163,25 @@ def build_parser() -> argparse.ArgumentParser:
     a.add_argument("--saturation", type=float, default=None)
     a.add_argument("--no-plots", action="store_true")
     a.set_defaults(func=_analyze)
+
+    r = sub.add_parser("run", help="drive a live survey over the NINA Advanced API")
+    r.add_argument("--manifest", required=True)
+    r.add_argument("--out", required=True, help="output dir for FITS/manifest/sidecar")
+    r.add_argument("--host", default="localhost")
+    r.add_argument("--port", type=int, default=1888)
+    r.add_argument("--api-key", default=None)
+    r.add_argument("--alt-bands", type=float, nargs="+", default=[30.0, 50.0, 70.0, 80.0])
+    r.add_argument("--azimuths", type=float, nargs="+", default=[0.0, 90.0, 180.0, 270.0])
+    r.add_argument("--load-axis", choices=["altitude", "dec"], default="altitude")
+    r.add_argument("--offset", type=float, default=8.0, help="offset-then-slew-in leg (deg)")
+    r.add_argument("--min-alt", type=float, default=20.0)
+    r.add_argument("--exposure", type=float, default=5.0)
+    r.add_argument("--burst", type=int, default=5)
+    r.add_argument("--gain", type=int, default=None)
+    r.add_argument("--settle", type=float, default=5.0)
+    r.add_argument("--strict-pier-side", action="store_true")
+    r.add_argument("--dry-run", action="store_true", help="plan without commanding gear")
+    r.set_defaults(func=_run)
 
     c = sub.add_parser("compare", help="difference two analyzed runs")
     c.add_argument("--a", required=True, help="run A node_results.json")

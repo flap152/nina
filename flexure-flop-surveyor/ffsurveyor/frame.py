@@ -40,6 +40,10 @@ class FrameResult:
     parallactic_deg: float
     sensor_pa_deg: float
     sky_pa_deg: float
+    # Both frames are retained (PRD point 9): sensor-fixed errors (tilt, pinched
+    # optic) are coherent in the sensor frame; gravity-driven errors are coherent
+    # in the gravity frame. Aggregation runs in parallel on both.
+    sensor_vector: DoubleAngleVector
     gravity_vector: DoubleAngleVector
     gravity_pa_deg: float
     magnitude: float
@@ -143,6 +147,7 @@ def process_frame(
         parallactic_deg=q,
         sensor_pa_deg=elong.pa_deg,
         sky_pa_deg=float(sky_pa),
+        sensor_vector=elong.vector,
         gravity_vector=gravity,
         gravity_pa_deg=float(gravity.pa_deg),
         magnitude=float(gravity.magnitude),

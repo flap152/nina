@@ -1,9 +1,15 @@
-# Capture half — building the survey in NINA
+# Capture half — manual sequence (M0 fallback only)
 
-This is the data-generation side of the Flexure & Flop Surveyor (PRD §5.1). It
-runs entirely in **stock NINA's Advanced Sequencer** — no plugin is required for
-v1. You build the survey once as a sequence template, then run it per night /
-per configuration.
+> **The primary capture architecture is live orchestration over the NINA
+> Advanced API — see [`nina-live-orchestration.md`](nina-live-orchestration.md).**
+> This manual Advanced Sequencer build is kept only as a fallback for the M0
+> proof of concept, or for rigs without the Advanced API plugin. The invariants
+> (raw slew, read-only solve, offset-then-slew-in, same pier side, immediate +
+> post-settle bursts) are identical; the live runner just enforces them in code.
+
+This is the data-generation side of the Flexure & Flop Surveyor (PRD §5.1). Built
+manually, it runs in **stock NINA's Advanced Sequencer** — no plugin required.
+You build the survey once as a sequence template, then run it per night.
 
 The analysis half (the `ffsurveyor` Python package) never talks to NINA; the two
 halves are connected only by FITS files on disk plus a small **sidecar CSV**

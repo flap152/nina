@@ -36,8 +36,12 @@ Full rationale: **[the PRD](docs/)** and the physics table in PRD §2.
         capture                        data                        analysis          output
 ```
 
-- **Capture** runs in stock NINA's Advanced Sequencer (no plugin for v1). See
-  **[docs/nina-sequence.md](docs/nina-sequence.md)**.
+- **Capture** drives NINA **live over the Advanced API** (`ninaAPI`, port 1888) —
+  raw slews, controlled offset-then-slew-in approaches, read-only solves. It does
+  *not* generate a sequence file to import. See
+  **[docs/nina-live-orchestration.md](docs/nina-live-orchestration.md)**
+  (a manual-sequence fallback for M0 is in
+  [docs/nina-sequence.md](docs/nina-sequence.md)).
 - **Analysis** is this Python package (`ffsurveyor`), portable and hardware-free.
 
 ### The load-bearing prerequisite: sensor-angle normalization
@@ -65,6 +69,17 @@ pip install -e .            # numpy, astropy, photutils, matplotlib, scipy
 Python 3.9+.
 
 ## Use
+
+Drive a live survey (capture half — needs NINA + the Advanced API plugin running):
+
+```bash
+ffsurvey run \
+    --manifest examples/manifest.example.json \
+    --out survey_run/ \
+    --host localhost --port 1888 \
+    --load-axis altitude --offset 8
+# add --dry-run to plan and write the sidecar without commanding any gear
+```
 
 Analyze one run:
 
@@ -114,6 +129,14 @@ nodes    = aggregate_nodes(report.processed, burst_filter="post_settle")
 | `plots.py` | Alt/az vector field, hysteresis map, repeatability map, comparison | §6.7 |
 | `ingest.py` | FITS + sidecar ingestion; results export | §6.4, §6.7 |
 | `config.py` | Run manifest + grid definitions (guide-config identity & placement) | §6.1, §6.5b |
+| `capture/ninaapi.py` | Live NINA Advanced API client (raw slew, read-only capture-solve) | points 1–3 |
+| `capture/planner.py` | Grid + approach-pair planning (offset-then-slew-in, feasibility) | §6.1, §6.2b |
+| `capture/runner.py` | Survey loop enforcing the invariants; writes manifest + sidecar | §5.1, points 2–6 |
+
+Both frames are kept per node (PRD point 9): `aggregate.py` computes flexure and
+hysteresis in the **gravity** frame *and* the **sensor** frame, so a sensor-fixed
+error (tilt, pinched optic) that is coherent only in the sensor frame is
+distinguishable from a gravity-driven one.
 
 The two mathematically sensitive stages — the angle transforms and the detection
 — are validated against independent references and synthetic ground truth in
@@ -139,14 +162,14 @@ pip install pytest && pytest -q
 
 ## Why not a NINA fork?
 
-The deliverable is a NINA **sequence template** + this Python analyzer — neither
-is a change to NINA's source. Stock Advanced Sequencer items (slew, Center,
-Take Exposure, Wait, variables, External Script) run the whole capture half with
-no custom code (PRD §3, §7). A NINA fork is only useful as an *API reference* if
-you later build the optional **M3 plugin**, and even then a NINA plugin is a
-separate MEF-composed DLL built against NINA assemblies — it doesn't live inside
-NINA's solution either. So this project stands alone; keep a NINA checkout nearby
-only for M3.
+The deliverable is a Python tool that drives NINA over its **Advanced API** plus
+this analyzer — neither is a change to NINA's source. The capture half is an API
+client (`ffsurveyor/capture/`) talking to the running NINA app; the analysis half
+never touches NINA at all. A NINA fork is only useful as an *API reference* if you
+later build the optional **M3 plugin**, and even then a NINA plugin is a separate
+MEF-composed DLL built against NINA assemblies — it doesn't live inside NINA's
+solution either. So this project stands alone; keep a NINA checkout nearby only
+for M3.
 
 ---
 

@@ -24,18 +24,27 @@ from .frame import FrameResult
 __all__ = ["BurstAggregate", "NodeAggregate", "aggregate_bursts", "aggregate_nodes"]
 
 
-def _mean_vector(results: Sequence[FrameResult]) -> DoubleAngleVector:
-    xs = np.array([r.gravity_vector.x for r in results], float)
-    ys = np.array([r.gravity_vector.y for r in results], float)
+# Vector accessors select which frame to aggregate in (PRD point 9).
+def _grav(r: FrameResult) -> DoubleAngleVector:
+    return r.gravity_vector
+
+
+def _sensor(r: FrameResult) -> DoubleAngleVector:
+    return r.sensor_vector
+
+
+def _mean_vector(results: Sequence[FrameResult], accessor=_grav) -> DoubleAngleVector:
+    xs = np.array([accessor(r).x for r in results], float)
+    ys = np.array([accessor(r).y for r in results], float)
     return DoubleAngleVector(np.mean(xs), np.mean(ys))
 
 
-def _scatter(results: Sequence[FrameResult], mean: DoubleAngleVector) -> float:
+def _scatter(results: Sequence[FrameResult], mean: DoubleAngleVector, accessor=_grav) -> float:
     """RMS distance of per-frame vectors from the mean, in double-angle space."""
     if len(results) < 2:
         return float("nan")
     d = [
-        np.hypot(r.gravity_vector.x - mean.x, r.gravity_vector.y - mean.y)
+        np.hypot(accessor(r).x - mean.x, accessor(r).y - mean.y)
         for r in results
     ]
     return float(np.sqrt(np.mean(np.square(d))))
@@ -71,6 +80,11 @@ class NodeAggregate:
     approaches: List[str]
     mean_repeatability: float
     n_frames: int
+    # Sensor-frame counterparts (PRD point 9): a pattern coherent here but not in
+    # the gravity frame indicates a sensor-fixed error (tilt, pinched optic).
+    sensor_flexure_mag: float = float("nan")
+    sensor_flexure_pa_deg: float = float("nan")
+    sensor_hysteresis_mag: float = float("nan")
 
 
 def _flag_outliers(results: Sequence[FrameResult], mean: DoubleAngleVector, k: float = 4.0):
@@ -151,30 +165,12 @@ def aggregate_nodes(
         for r in node_frames:
             by_appr[r.approach].append(r)
 
-        appr_means = {a: _mean_vector(fr) for a, fr in by_appr.items()}
-        approaches = sorted(appr_means)
+        approaches = sorted(by_appr)
 
-        # Flexure = mean of the approach means (path-independent common part).
-        fx = np.mean([v.x for v in appr_means.values()])
-        fy = np.mean([v.y for v in appr_means.values()])
-        flexure = DoubleAngleVector(fx, fy)
-
-        # Hysteresis = difference between approach means (path-dependent part).
-        hyst_vec = None
-        if len(approaches) >= 2:
-            pair_dists = []
-            for a, b in combinations(approaches, 2):
-                va, vb = appr_means[a], appr_means[b]
-                pair_dists.append(np.hypot(va.x - vb.x, va.y - vb.y))
-            hyst_mag = float(np.mean(pair_dists))
-            if len(approaches) == 2:
-                a, b = approaches
-                hyst_vec = DoubleAngleVector(
-                    appr_means[a].x - appr_means[b].x,
-                    appr_means[a].y - appr_means[b].y,
-                )
-        else:
-            hyst_mag = float("nan")  # cannot separate flop without >=2 approaches
+        # Flexure = mean of approach means; hysteresis = their difference.
+        # Computed in BOTH frames (PRD point 9).
+        flexure, hyst_mag, hyst_vec = _flexure_hysteresis(by_appr, approaches, _grav)
+        s_flexure, s_hyst_mag, _ = _flexure_hysteresis(by_appr, approaches, _sensor)
 
         reps = []
         for fr in by_appr.values():
@@ -202,6 +198,34 @@ def aggregate_nodes(
                 approaches=approaches,
                 mean_repeatability=mean_rep,
                 n_frames=len(node_frames),
+                sensor_flexure_mag=float(s_flexure.magnitude),
+                sensor_flexure_pa_deg=float(s_flexure.pa_deg),
+                sensor_hysteresis_mag=s_hyst_mag,
             )
         )
     return out
+
+
+def _flexure_hysteresis(by_appr, approaches, accessor):
+    """Flexure (mean of approach means) and hysteresis (their difference)."""
+    appr_means = {a: _mean_vector(fr, accessor) for a, fr in by_appr.items()}
+    fx = np.mean([appr_means[a].x for a in approaches])
+    fy = np.mean([appr_means[a].y for a in approaches])
+    flexure = DoubleAngleVector(fx, fy)
+
+    hyst_vec = None
+    if len(approaches) >= 2:
+        pair_dists = []
+        for a, b in combinations(approaches, 2):
+            va, vb = appr_means[a], appr_means[b]
+            pair_dists.append(np.hypot(va.x - vb.x, va.y - vb.y))
+        hyst_mag = float(np.mean(pair_dists))
+        if len(approaches) == 2:
+            a, b = approaches
+            hyst_vec = DoubleAngleVector(
+                appr_means[a].x - appr_means[b].x,
+                appr_means[a].y - appr_means[b].y,
+            )
+    else:
+        hyst_mag = float("nan")  # cannot separate flop without >=2 approaches
+    return flexure, hyst_mag, hyst_vec
