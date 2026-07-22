@@ -131,6 +131,30 @@ def _run(args) -> int:
     return 0
 
 
+def _simulate(args) -> int:
+    """Generate a synthetic ground-truth run for closed-loop validation."""
+    from .simulate import InjectionModel, simulate_run
+
+    manifest = load_manifest(args.manifest)
+    model = InjectionModel(
+        flexure_amp=args.flexure_amp,
+        flop_amp=args.flop_amp,
+        seeing_sigma=args.seeing,
+        sensor_rotation_deg=args.sensor_rotation,
+    )
+    result = simulate_run(args.out, manifest, model=model, burst_count=args.burst)
+    print(f"Wrote {result['n_frames']} synthetic frame(s) to {result['out_dir']}")
+    print(f"  sidecar: {result['sidecar']}")
+    print(f"  manifest: {result['manifest']}")
+    print("Ground truth per node (gravity frame, flexure PA = 0 = vertical):")
+    for t in result["truth"]:
+        print(f"  {t['node_id']}: flexure_ecc={t['flexure_ecc']:.3f} "
+              f"hysteresis_expected={t['hysteresis_expected']:.3f}")
+    print(f"Now: ffsurvey analyze --manifest {result['manifest']} "
+          f"--fits '{args.out}/*.fits' --sidecar {result['sidecar']} --out {args.out}/out")
+    return 0
+
+
 def _doctor(args) -> int:
     """Preflight-check a live NINA Advanced API instance."""
     from .capture import NinaClient, run_doctor
@@ -197,6 +221,16 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--strict-pier-side", action="store_true")
     r.add_argument("--dry-run", action="store_true", help="plan without commanding gear")
     r.set_defaults(func=_run)
+
+    sim = sub.add_parser("simulate", help="generate a synthetic ground-truth run")
+    sim.add_argument("--manifest", required=True)
+    sim.add_argument("--out", required=True)
+    sim.add_argument("--flexure-amp", type=float, default=0.6)
+    sim.add_argument("--flop-amp", type=float, default=0.15)
+    sim.add_argument("--seeing", type=float, default=0.03)
+    sim.add_argument("--sensor-rotation", type=float, default=33.0)
+    sim.add_argument("--burst", type=int, default=3)
+    sim.set_defaults(func=_simulate)
 
     d = sub.add_parser("doctor", help="preflight-check a live NINA Advanced API")
     d.add_argument("--host", default="localhost")
