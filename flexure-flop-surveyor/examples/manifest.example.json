@@ -1,0 +1,23 @@
+{
+  "run_id": "2026-01-15_edgehd925_guidescope",
+  "date": "2026-01-15",
+  "site": {
+    "latitude_deg": 34.05,
+    "longitude_deg": -118.24,
+    "elevation_m": 120.0,
+    "name": "Backyard"
+  },
+  "guide": {
+    "config_id": "GS-60mm-toprings",
+    "mode": "guidescope",
+    "model_or_fl": "60mm f/4 guidescope",
+    "mounting": "guide rings",
+    "mount_point": "OTA top dovetail"
+  },
+  "mirror_lock_state": "off",
+  "grid_id": "default-4band",
+  "seeing_notes": "avg 2.5 arcsec, light breeze",
+  "sensor_angle_sign": 1,
+  "sensor_angle_offset_deg": 0.0,
+  "prefer_wcs_angle": true
+}

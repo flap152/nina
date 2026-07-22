@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "flexure-flop-surveyor"
+version = "0.1.0"
+description = "Map mechanical star-elongation error across the sky and separate flexure, flop, and guidescope stiction from a NINA survey."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Flexure & Flop Surveyor contributors" }]
+dependencies = [
+    "numpy>=1.23",
+    "astropy>=5.0",
+    "photutils>=1.5",
+    "matplotlib>=3.5",
+    "scipy>=1.9",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[project.scripts]
+ffsurvey = "ffsurveyor.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["ffsurveyor*"]
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::UserWarning",
+]

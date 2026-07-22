@@ -1,0 +1,13 @@
+filename,node_id,approach,burst
+2026-01-15_210000_L_0001.fits,Alt30-Az090,high,immediate
+2026-01-15_210012_L_0002.fits,Alt30-Az090,high,post_settle
+2026-01-15_210030_L_0003.fits,Alt30-Az090,high,post_settle
+2026-01-15_210120_L_0004.fits,Alt30-Az090,low,immediate
+2026-01-15_210132_L_0005.fits,Alt30-Az090,low,post_settle
+2026-01-15_210150_L_0006.fits,Alt30-Az090,low,post_settle
+2026-01-15_211000_L_0007.fits,Alt70-Az180,high,immediate
+2026-01-15_211012_L_0008.fits,Alt70-Az180,high,post_settle
+2026-01-15_211030_L_0009.fits,Alt70-Az180,high,post_settle
+2026-01-15_211120_L_0010.fits,Alt70-Az180,low,immediate
+2026-01-15_211132_L_0011.fits,Alt70-Az180,low,post_settle
+2026-01-15_211150_L_0012.fits,Alt70-Az180,low,post_settle
