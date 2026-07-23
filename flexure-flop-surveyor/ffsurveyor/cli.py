@@ -113,11 +113,18 @@ def _run(args) -> int:
         return 1
 
     client = NinaClient(host=args.host, port=args.port, api_key=args.api_key)
+    # Guiding follows the manifest's guide mode (guidescope/oag => on, off => off)
+    # unless overridden. No OAG required -- a guidescope run guides too.
+    guiding = (manifest.guide.mode != "off") and not args.no_guiding
     cfg = RunnerConfig(
         exposure_s=args.exposure, burst_count=args.burst, gain=args.gain,
         settle_s=args.settle, strict_pier_side=args.strict_pier_side,
         out_dir=args.out, dry_run=args.dry_run,
+        guiding=guiding, calibrate_at_start=args.calibrate_at_start,
     )
+    if guiding:
+        print(f"Guiding ON (mode={manifest.guide.mode}); resume+settle after each "
+              f"slew, no mid-survey recalibration.")
     runner = SurveyRunner(client, manifest, plan, cfg)
     runner.run()
     paths = runner.write_outputs()
@@ -218,6 +225,10 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--burst", type=int, default=5)
     r.add_argument("--gain", type=int, default=None)
     r.add_argument("--settle", type=float, default=5.0)
+    r.add_argument("--no-guiding", action="store_true",
+                   help="force guiding off even if the manifest guide mode is set")
+    r.add_argument("--calibrate-at-start", action="store_true",
+                   help="allow ONE guider calibration at run start (never mid-survey)")
     r.add_argument("--strict-pier-side", action="store_true")
     r.add_argument("--dry-run", action="store_true", help="plan without commanding gear")
     r.set_defaults(func=_run)

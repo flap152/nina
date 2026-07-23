@@ -40,7 +40,18 @@ class FakeClient:
         self.calls.append(("capture", filename, ("solve" if solve else "nosolve")))
         return {"PlateSolveResult": {"Rotation": self.rotation, "Ra": 10.0, "Dec": 40.0}}
 
+    def start_guiding(self, calibrate=False, wait=True):
+        self.calls.append(("start_guiding", "calibrate" if calibrate else "resume"))
+
+    def stop_guiding(self):
+        self.calls.append(("stop_guiding",))
+
+    def guider_info(self):
+        self.calls.append(("guider_info",))
+        return {"RMSTotal": 0.42}
+
     extract_solve = staticmethod(NinaClient.extract_solve)
+    extract_guide_rms = staticmethod(NinaClient.extract_guide_rms)
 
 
 def _manifest():
@@ -143,6 +154,48 @@ def test_pier_side_mismatch_flagged():
     client = FlipClient()
     runner = _run(client)
     assert any(v.warnings for v in runner.visits)
+
+
+def _run_guided(client, config=None):
+    cfg = config or RunnerConfig(burst_count=2, settle_s=1.0, guiding=True, guide_settle_s=1.0)
+    runner = SurveyRunner(client, _manifest(), _single_node_plan(), cfg,
+                          clock=lambda: "2026-01-15T09:00:00",
+                          sleep=lambda s: client.calls.append(("sleep", s)))
+    runner.run()
+    return runner
+
+
+def test_guiding_resumes_after_each_slew_never_recalibrates():
+    client = FakeClient()
+    _run_guided(client)
+    starts = [c for c in client.calls if c[0] == "start_guiding"]
+    # One resume per approach (2), plus the optional start-of-run call.
+    assert len(starts) >= 2
+    # Mid-survey resumes must NEVER recalibrate (calibrate=False).
+    # calibrate_at_start defaults False, so NO call should recalibrate at all here.
+    assert all(s[1] == "resume" for s in starts), starts
+
+
+def test_guiding_records_guide_rms_per_frame():
+    client = FakeClient()
+    runner = _run_guided(client)
+    assert all(r["guide_rms"] == 0.42 for r in runner.sidecar_rows)
+    assert all(v.guide_rms == 0.42 for v in runner.visits)
+
+
+def test_calibrate_at_start_allows_exactly_one_calibration():
+    client = FakeClient()
+    _run_guided(client, RunnerConfig(burst_count=1, guiding=True, guide_settle_s=0.0,
+                                     calibrate_at_start=True))
+    starts = [c for c in client.calls if c[0] == "start_guiding"]
+    calibrations = [s for s in starts if s[1] == "calibrate"]
+    assert len(calibrations) == 1  # only the run-start call calibrates
+
+
+def test_no_guiding_calls_when_guiding_off():
+    client = FakeClient()
+    _run(client)  # default config: guiding off
+    assert not [c for c in client.calls if c[0] in ("start_guiding", "guider_info")]
 
 
 def test_planner_drops_node_without_feasible_pair_near_horizon():

@@ -44,6 +44,12 @@ class RunnerConfig:
     strict_pier_side: bool = False           # True => abort a node on a pier-side mismatch
     out_dir: str = "survey_run"
     dry_run: bool = False                    # plan/record without calling the mount/camera
+    # Guiding (PRD 5.1). When on, guiding is resumed+settled after every slew, but
+    # NEVER recalibrated mid-survey -- recalibration would reset the guide reference
+    # whose stiction we are trying to measure.
+    guiding: bool = False
+    calibrate_at_start: bool = False         # allow ONE calibration at run start only
+    guide_settle_s: float = 5.0              # dwell after resuming guiding, before capture
 
 
 @dataclass
@@ -53,6 +59,7 @@ class VisitRecord:
     pier_side: Optional[str]
     node_ra_deg: float
     node_dec_deg: float
+    guide_rms: Optional[float] = None
     frames: List[dict] = field(default_factory=list)
     warnings: List[str] = field(default_factory=list)
 
@@ -114,7 +121,7 @@ class SurveyRunner:
 
     def _capture_burst(self, node: NodePlan, leg: ApproachLeg, burst: str,
                        pier_side: Optional[str], node_ra: float, node_dec: float,
-                       iso: str, visit: VisitRecord) -> None:
+                       iso: str, visit: VisitRecord, guide_rms: Optional[float] = None) -> None:
         cfg = self.config
         for i in range(cfg.burst_count):
             fname = self._filename(node.node_id, leg.tag, burst, i)
@@ -142,6 +149,10 @@ class SurveyRunner:
                 # NINA's own solve angle, recorded as a cross-check; the analyzer
                 # re-solves from pixels for the authoritative value (PRD 6.4a, 9).
                 "nina_rotation_deg": rotation,
+                # Guide RMS at this node-visit: lets the analyst confirm guiding
+                # was comparable across the runs being differenced (PRD point on
+                # run consistency), and drop nodes where it wasn't.
+                "guide_rms": guide_rms,
             }
             self.sidecar_rows.append(row)
             visit.frames.append(row)
@@ -171,13 +182,35 @@ class SurveyRunner:
             if self.config.strict_pier_side:
                 return visit  # skip capture; caller records the aborted visit
 
+        # For a guided run, resume+settle guiding on the new field (no recalibrate)
+        # before any capture -- a guided sub is meaningless until PHD2 is settled.
+        # This settle is the guide loop's; the immediate/post-settle split below is
+        # the MOUNT/tube settle (backlash take-up, ring-down; PRD 6.3).
+        rms = self._settle_guiding()
+        visit.guide_rms = rms
+
         # Immediate burst (catches a flop releasing right after slew), then settle,
         # then post-settle burst (PRD 6.3). Immediate burst comes BEFORE the wait.
-        self._capture_burst(node, leg, "immediate", pier, node_ra, node_dec, iso, visit)
+        self._capture_burst(node, leg, "immediate", pier, node_ra, node_dec, iso, visit, rms)
         self._sleep(self.config.settle_s)
         iso2 = self._clock()
-        self._capture_burst(node, leg, "post_settle", pier, node_ra, node_dec, iso2, visit)
+        self._capture_burst(node, leg, "post_settle", pier, node_ra, node_dec, iso2, visit, rms)
         return visit
+
+    def _settle_guiding(self) -> Optional[float]:
+        """Resume guiding after a slew (no recalibration) and read the guide RMS."""
+        if not self.config.guiding or self.config.dry_run:
+            return None
+        try:
+            # calibrate=False is the invariant: never recalibrate mid-survey.
+            self.client.start_guiding(calibrate=False, wait=True)
+        except Exception:
+            return None
+        self._sleep(self.config.guide_settle_s)
+        try:
+            return self.client.extract_guide_rms(self.client.guider_info())
+        except Exception:
+            return None
 
     # -- whole survey ----------------------------------------------------- #
 
@@ -186,8 +219,16 @@ class SurveyRunner:
             # Hold tracking rate constant for the survey (rate is not a variable).
             try:
                 self.client.set_tracking("Sidereal")
-            except Exception as exc:  # non-fatal; log into the first visit later
+            except Exception:
                 pass
+            # Optionally calibrate the guider ONCE, at the very start. This is the
+            # only place calibration is allowed; every mid-survey resume uses
+            # calibrate=False so the guide reference is never reset.
+            if self.config.guiding:
+                try:
+                    self.client.start_guiding(calibrate=self.config.calibrate_at_start, wait=True)
+                except Exception:
+                    pass
 
         for node in self.plan.nodes:
             reference_pier = None
@@ -208,7 +249,7 @@ class SurveyRunner:
         sidecar_path = os.path.join(self.config.out_dir, "sidecar.csv")
         fields = ["filename", "node_id", "approach", "burst", "timestamp",
                   "commanded_ra_deg", "commanded_dec_deg", "commanded_alt_deg",
-                  "commanded_az_deg", "pier_side", "nina_rotation_deg"]
+                  "commanded_az_deg", "pier_side", "nina_rotation_deg", "guide_rms"]
         with open(sidecar_path, "w", newline="", encoding="utf-8") as fh:
             writer = csv.DictWriter(fh, fieldnames=fields)
             writer.writeheader()

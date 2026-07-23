@@ -179,6 +179,38 @@ class NinaClient:
         r = self._get("equipment/camera/capture", params)
         return r if isinstance(r, dict) else {"Response": r}
 
+    # -- guider ----------------------------------------------------------- #
+
+    def guider_info(self) -> Dict[str, Any]:
+        r = self._get("equipment/guider/info")
+        return r if isinstance(r, dict) else {"Response": r}
+
+    def start_guiding(self, calibrate: bool = False, wait: bool = True) -> Any:
+        """Start/resume guiding. ``calibrate=False`` MUST be used between node
+        approaches — recalibrating would reset the guide reference we are
+        measuring against (PRD: guidescope stiction lives in that reference).
+        """
+        return self._get("equipment/guider/start",
+                         {"calibrate": calibrate, "waitForResult": wait})
+
+    def stop_guiding(self) -> Any:
+        return self._get("equipment/guider/stop")
+
+    @staticmethod
+    def extract_guide_rms(info: Dict[str, Any]) -> Optional[float]:
+        """Best-effort total guide RMS (pixels) from an ``equipment/guider/info``."""
+        if not isinstance(info, dict):
+            return None
+        # Flat spellings.
+        v = _first(info, ["RMSTotal", "TotalRMS", "rmsTotal"])
+        if v is not None:
+            return _as_float(v)
+        # Nested { "RMS": { "Total": ... } } shapes.
+        rms = info.get("RMS") or info.get("rms")
+        if isinstance(rms, dict):
+            return _as_float(_first(rms, ["Total", "total", "RA", "Dec"]))
+        return _as_float(rms) if rms is not None else None
+
     @staticmethod
     def extract_solve(capture_response: Dict[str, Any]) -> PlateSolveReadout:
         """Pull the PlateSolveResult (Rotation, RA, Dec, PixelScale) out."""
@@ -202,6 +234,13 @@ def _first(d: Dict[str, Any], keys):
         if k in d and d[k] is not None:
             return d[k]
     return None
+
+
+def _as_float(v):
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
 
 
 def _coord(d, keys, to_deg_from_hours: bool = False):

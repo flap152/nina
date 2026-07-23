@@ -25,7 +25,10 @@ the part common to both approaches; hysteresis is their difference; seeing/wind
 is the non-repeatable scatter within a burst. Differencing two whole runs
 (guidescope vs OAG, locks on/off, placement A/B) answers the hardware questions.
 
-Full rationale: **[the PRD](docs/)** and the physics table in PRD §2.
+Full rationale: **[the PRD](docs/)**, the physics table in PRD §2, and
+**[docs/methodology.md](docs/methodology.md)** (the two differentials, guiding
+assumptions, seeing vs signal, the atmospheric-dispersion confounder, sensitivity,
+and feed-forward as future work).
 
 ---
 
